@@ -1,0 +1,61 @@
+<svg viewBox="0 0 720 900" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans', 'Segoe UI', Arial, sans-serif">
+  <defs>
+    <marker id="arrow-d" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+  </defs>
+
+  <rect width="720" height="900" fill="#0d1117"/>
+
+  <!-- IP cameras -->
+  <rect x="210" y="16" width="300" height="56" rx="6" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>
+  <text x="360" y="40" text-anchor="middle" font-size="15" font-weight="600" fill="#e6edf3">IP cameras</text>
+  <text x="360" y="58" text-anchor="middle" font-size="11.5" fill="#8b949e">RTSP / ONVIF · discovery, credentials, capability probing</text>
+
+  <line x1="360" y1="72" x2="360" y2="104" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-d)"/>
+
+  <!-- Go2RTC -->
+  <rect x="140" y="106" width="440" height="80" rx="6" fill="#0d1117" stroke="#e6edf3" stroke-width="1.75"/>
+  <text x="360" y="132" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Go2RTC — stream unifier</text>
+  <text x="360" y="152" text-anchor="middle" font-size="11.5" fill="#8b949e">One process fronts RTSP, WebRTC and HLS.</text>
+  <text x="360" y="168" text-anchor="middle" font-size="11.5" fill="#8b949e">Cameras from different vendors expose one consistent interface.</text>
+
+  <line x1="360" y1="186" x2="360" y2="218" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-d)"/>
+  <text x="374" y="206" font-size="11" fill="#8b949e">decoded frames</text>
+
+  <!-- Inference pipeline -->
+  <rect x="90" y="220" width="540" height="264" rx="6" fill="#0d1117" stroke="#e6edf3" stroke-width="1.75"/>
+  <text x="360" y="248" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Inference pipeline</text>
+  <text x="360" y="266" text-anchor="middle" font-size="11.5" fill="#8b949e">on-device, RK3576 NPU (target)</text>
+
+  <rect x="140" y="282" width="440" height="40" rx="5" fill="#161b22" stroke="#484f58" stroke-width="1.25"/>
+  <text x="360" y="307" text-anchor="middle" font-size="13.5" fill="#e6edf3">YOLO → ONNX → RKNN <tspan fill="#8b949e" font-size="11.5">(compiled ahead of time)</tspan></text>
+
+  <line x1="360" y1="322" x2="360" y2="344" stroke="#484f58" stroke-width="1.25" marker-end="url(#arrow-d)"/>
+
+  <rect x="140" y="346" width="440" height="40" rx="5" fill="#161b22" stroke="#484f58" stroke-width="1.25"/>
+  <text x="360" y="371" text-anchor="middle" font-size="13.5" fill="#e6edf3">Multi-object tracking (ByteTrack / BoT-SORT)</text>
+
+  <line x1="360" y1="386" x2="360" y2="408" stroke="#484f58" stroke-width="1.25" marker-end="url(#arrow-d)"/>
+
+  <rect x="140" y="410" width="440" height="60" rx="5" fill="#161b22" stroke="#484f58" stroke-width="1.25"/>
+  <text x="360" y="433" text-anchor="middle" font-size="13" fill="#e6edf3">Geometry layer: zones, crossing lines, dwell rules</text>
+  <text x="360" y="450" text-anchor="middle" font-size="11.5" fill="#8b949e">evaluated against track IDs, not frames</text>
+
+  <line x1="360" y1="484" x2="360" y2="516" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-d)"/>
+  <text x="392" y="504" font-size="11" fill="#8b949e">events, not video</text>
+
+  <!-- Supabase -->
+  <rect x="140" y="518" width="440" height="88" rx="6" fill="#0d1117" stroke="#e6edf3" stroke-width="1.75"/>
+  <text x="360" y="546" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Supabase / PostgreSQL</text>
+  <text x="360" y="566" text-anchor="middle" font-size="11.5" fill="#8b949e">Event log · alerts · sites · cameras · evidence index</text>
+  <text x="360" y="584" text-anchor="middle" font-size="11.5" fill="#8b949e">Row-level security scoped per site and per operator</text>
+
+  <line x1="360" y1="606" x2="360" y2="644" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow-d)"/>
+
+  <!-- Consumers -->
+  <rect x="60" y="646" width="600" height="56" rx="6" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>
+  <text x="360" y="680" text-anchor="middle" font-size="14" font-weight="600" fill="#e6edf3">Dashboard · REST API · webhooks · Telegram / email alerts</text>
+
+  <text x="360" y="740" text-anchor="middle" font-size="11.5" fill="#6e7681">Full engineering rationale for each stage is in the README below.</text>
+</svg>
