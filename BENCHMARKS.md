@@ -1,32 +1,28 @@
-# Benchmarks — where the numbers stand today
+# Numen Vision — benchmark record and limits
 
-This file exists so the *Targets* table in the README reads as targets, not results. Here is what is actually measured versus what is instrumented-but-not-yet-run.
+This is a public summary of the private implementation's `docs/BENCHMARK_RESULTS.md`, `docs/M6_INTEGRATION.md` and `docs/EDGE_CAPACITY_3_CAMERAS.md` as reviewed on 2026-09-23. The raw video, runtime logs and deployment configuration are not part of this repository. Results below are measurements on an RK3576 development board, not a certification or a field pilot.
 
-## What is measured today
+## Recorded M7 run
 
-The x86/Windows prototype (see *Current vs. target* in the README) runs against live RTSP streams, and the private repository includes an automated benchmark harness (`benchmark.py`) that evaluates a recorded session against explicit pass/fail criteria — not a one-off number, a repeatable check:
+On 2026-09-18, the private harness ran for **7.85 continuous hours** (471 one-minute samples). Four replayed 4 MP H.265 sources at 15 input fps were decoded and scaled to 960×540; analysis was configured at 4 fps per camera with rules and event evidence enabled. All four inputs replayed the same file. The board was open on a desk, without an enclosure.
 
-| Criterion | Threshold | What it protects against |
-|---|---|---|
-| Inference FPS | ≥ 90% of target FPS | silent throughput degradation |
-| Event latency (p95) | < 2000 ms | slow alerts, not just slow frames |
-| Dropped-frame ratio | < 1% | camera desync under load |
-| Temperature | < 75 °C | thermal throttling on sustained load |
-| Memory (RSS slope) | < 10 MB/hour, < 1.20× baseline after warmup | slow leaks that only show up over hours |
-| Process restarts | tracked per camera | watchdog masking a real failure |
+| Criterion | Acceptance threshold | Recorded |
+|---|---:|---:|
+| Analysed fps per camera | ≥ 3.8 (95% of 4) | 3.84 on all four |
+| Restarts, vision errors, source reconnections | 0 each | 0 each |
+| Thermal throttling | None | None; 46.2 °C peak |
+| Memory slope after warm-up | < 10 MB/hour | +7.5 MB/hour |
+| Process-tree memory after warm-up | Recorded, not a standalone pass criterion | 457 MB minimum; 512 MB maximum |
 
-The 90-minute warmup window and the 24-hour evaluation horizon come from `docs/RK3576_VALIDATION_PLAN.md` (private repo) — the same document that sets these thresholds. The logic runs; there is a test suite behind it.
+The harness recorded 443 events in this run. It checks operation and resource use; this event count does **not** establish detection precision or alert usefulness. Component inference timings from shorter M6 runs are not camera-to-alert latency.
 
-## What is not measured yet
+## What remains unmeasured
 
-**No 24-hour run has been executed and recorded against these criteria.** The harness exists; the campaign hasn't happened. Concretely, that means:
+- **24-hour endurance:** this run lasted 7.85 hours. A longer window is assigned to the pilot.
+- **Physical cameras and enclosure:** input was file replay; the 4 MP material was upscaled from 640×360, and the board was in open air. Decode cost and thermals can differ on site.
+- **Full deployed load:** continuous disk recording, go2rtc live view and the dashboard were not loaded during this run.
+- **Connectivity failure on the board:** the durable outbox has automated tests, but cloud loss was not exercised in this run.
+- **Detection and alert accuracy:** requires annotated real camera data in a residential pilot.
+- **Earlier tender targets:** <200 ms glass-to-glass and four concurrent streams at 15+ analysed fps were design targets, not results. They do not describe the current residential operating point.
 
-- The `<200 ms glass-to-glass` and `4 streams at 15+ FPS` figures in the README's *Targets* table are the design targets fed into this harness, not its output yet.
-- Everything above was validated for correctness (the benchmark's own test suite passes, on synthetic and short recorded sessions) — not yet run as a real 24h campaign on live cameras.
-- The RK3576/NPU hardware migration hasn't happened, so none of this has been measured on the target device at all. Today's numbers, once the campaign runs, will describe the x86/Windows prototype.
-
-## Why this file exists
-
-Publishing "< 200ms" as if it were measured, when it's a threshold nothing has been checked against yet, is the exact failure this project is trying to avoid elsewhere — the same reason the RAG project retracts findings when the instrument turns out to be wrong. Better to say plainly: the instrument is built, the campaign is scheduled, here's what it will report once it runs.
-
-This file will be updated with real numbers the day that first 24-hour campaign completes.
+The defensible operating claim today is **four replayed sources at about 4 analysed fps each for 7.85 hours under the conditions above**. No public raw dataset or replication package is offered because the implementation and source media are private.

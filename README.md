@@ -1,158 +1,41 @@
-# Edge AI Surveillance — Embedded Computer Vision Pipeline
+# Numen Vision — Edge Video Analytics
 
-![Status](https://img.shields.io/badge/status-validated%20prototype-brightgreen)
-![Target](https://img.shields.io/badge/hardware-RK3576%20NPU-blue)
-![Inference](https://img.shields.io/badge/inference-YOLO%20%E2%86%92%20RKNN-green)
-![Backend](https://img.shields.io/badge/backend-Supabase-purple)
+Numen Vision began as a multi-camera prototype for public-sector surveillance tenders and evolved into a residential edge appliance for entrances, yards and gates. The implementation is private. This repository documents the architecture, engineering decisions and measured limits without publishing camera data or deployment configuration.
 
-**Commercial-grade edge video analytics appliance for public tenders. IP cameras in, structured events out — all inference on-device, no video leaving the site unless an operator asks for it.**
+## Current system
 
-> **This repository documents the architecture. The implementation is private** — it is the product being commercialised. What follows is the design, the engineering decisions and the measured targets, at the level of detail a technical reader needs to evaluate the work.
+The prototype first ran against live RTSP streams on x86/Windows. The current implementation also runs on a NanoPi M5 with a Rockchip RK3576: FFmpeg uses the VPU for H.265 decode and scaling, and YOLOX-Nano FP16 runs through RKNN on the NPU. Per-camera rules turn detections into events; snapshots and short clips are retained when a rule fires. Events can cross the network, while continuous video stays on site.
 
----
-
-## Current vs. target
-
-**Current — validated and running:** a multi-camera prototype on x86/Windows, tested against live RTSP streams. Go2RTC unifies the camera feeds, OpenCV/YOLO does the detection, and the Supabase backend already implements the tenant-isolated event pipeline described below. 317 automated tests, CI on every push.
-
-**Target — the deployment this is built toward:** the same pipeline compiled to RKNN and running on-device on an RK3576 NPU appliance, at the throughput and latency figures in the Targets table below. That migration is the hardware-specific work still ahead — the software architecture (events not video, tracking before rules, tenant isolation) does not change.
-
-The distinction matters: everything under **Architecture**, **Engineering decisions** and the Supabase backend is real, tested code today. Everything under **Targets** is where that code is headed on dedicated hardware, not yet measured on it.
-
----
-
-## The constraint that shapes everything
-
-Public-sector video surveillance has two requirements that pull against each other: **operators need real-time detection across many cameras**, and **footage cannot be shipped to a cloud provider for analysis**. Bandwidth at remote sites makes it impractical; procurement rules often make it impossible.
-
-That forces inference to the edge, onto hardware with a fixed power and thermal budget. Every decision below follows from it.
-
----
-
-## Architecture
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture-dark.svg">
-  <img src="./docs/architecture-light.svg" alt="Pipeline: IP cameras to Go2RTC, to on-device inference (YOLO to RKNN, tracking, geometry rules), to Supabase/PostgreSQL, to dashboard and alerts">
-</picture>
-
-<details>
-<summary>Text version of the diagram</summary>
-
-```
-IP cameras (RTSP / ONVIF)
-        │  discovery, credentials, capability probing
-        ▼
-Go2RTC — stream unifier
-  One process fronts RTSP, WebRTC and HLS. Cameras from
-  different vendors expose one consistent interface.
-        │  decoded frames
-        ▼
-Inference pipeline (on-device, RK3576 NPU — target)
-  YOLO → ONNX → RKNN (compiled ahead of time)
-        │
-        ▼
-  Multi-object tracking (ByteTrack / BoT-SORT)
-        │
-        ▼
-  Geometry layer: zones of interest, crossing lines,
-  dwell rules — evaluated against track IDs, not frames
-        │  events, not video
-        ▼
-Supabase / PostgreSQL
-  Event log · alerts · sites · cameras · evidence index
-  Row-level security scoped per site and per operator
-        │
-        ▼
-  Dashboard · REST API · webhooks · Telegram / email alerts
+```text
+IP camera / replayed source
+  → VPU decode and scale → NPU detection → tracking and rules
+  → local evidence and durable event queue → cloud alert
 ```
 
-</details>
+The earlier x86 prototype and the RK3576 implementation are stages of the same product. The board measurements below describe the residential configuration, not the earlier tender target of four streams at 15 analysed fps or under 200 ms glass-to-glass latency.
 
----
+## Measured on RK3576
 
-## Hardware
+In a recorded **7.85-hour run on 2026-09-18**, four 4 MP H.265 sources at 15 input fps were replayed from the same file, decoded and scaled to 960×540, then analysed at a configured 4 fps per camera. Real rules and event evidence were enabled. The board was open on a desk.
 
-| | |
-|---|---|
-| **Board** | NanoPi M5 — Rockchip RK3576 |
-| **Compute** | 4× Cortex-A55 + NPU rated at 6 TOPS |
-| **Memory** | 4 GB LPDDR4 |
-| **OS** | Linux ARM64 (Ubuntu 22.04 / Armbian) |
-| **Deployment** | Docker Compose, reproducible build, field-updatable over the air |
+| Measure | Recorded result |
+|---|---:|
+| Analysed frames | 3.84 fps per camera (96% of the 4 fps setting) |
+| Restarts / vision errors / source reconnections | 0 / 0 / 0 |
+| Peak board temperature | 46.2 °C; no throttling recorded |
+| Memory after warm-up | 457–512 MB RSS; +7.5 MB/hour slope |
 
-The NPU is the reason this board was chosen and the reason the software looks the way it does. CPU-only inference on an A55 cluster does not sustain four streams; the NPU does, but only for models compiled to its own runtime.
-
----
+These results come from the private implementation's M7 benchmark log. [Benchmarks and limitations](BENCHMARKS.md) describes the measurement procedure and what has not been validated. The recorded result supports **four replayed sources at about 4 analysed fps each under the tested conditions**; it is not a field reliability or detection-accuracy claim.
 
 ## Engineering decisions
 
-**RKNN over ONNX Runtime.** ONNX Runtime is easier to work with and runs the same model on any machine — but on this board it falls back to CPU and the frame budget collapses. Compiling YOLO through `ONNX → RKNN Toolkit v2` binds the project to Rockchip hardware in exchange for the NPU. For a fixed-hardware appliance that trade is worth taking; for portable software it would not be.
+- **Inference on the device.** Video is decoded and analysed locally. The cloud receives structured events and selected evidence, not a continuous feed.
+- **Hardware-specific acceleration.** FFmpeg uses `rkmpp`/RGA for decode and scaling; the detector is compiled for the Rockchip NPU through RKNN.
+- **Rules after tracking.** Zone and line-crossing decisions use object identities to avoid repeated alerts from consecutive frames.
+- **Offline continuity.** A durable outbox queues events until connectivity returns. Its behavior is covered by tests in the private implementation; a board-level cloud outage run is still pending.
 
-**Go2RTC as the stream unifier.** IP cameras disagree about everything: transport, authentication, codec, keyframe interval. Putting one proxy in front means the inference pipeline consumes a single interface and camera compatibility becomes a configuration problem rather than a code problem. It also gives WebRTC to the dashboard without a second transcoding path.
+## Current limits and next validation
 
-**Events cross the network, video does not.** Detection produces structured events; clips are stored locally and uploaded only on demand, bounded to a short window around the event. This keeps bandwidth predictable at remote sites and narrows what is exposed if the backend is compromised.
+No 24-hour campaign, physical-camera run, enclosed-device thermal test or residential pilot has been completed. The four replayed inputs used the same upscaled source; continuous recording and the live dashboard were not loaded in the benchmark. Alert accuracy must be evaluated with real pilot data. The earlier targets of **<200 ms glass-to-glass** and **four streams at 15+ analysed fps** have not been measured and are not claimed here.
 
-**Tracking before rules, not after.** Zone and line-crossing logic is evaluated against track identities rather than per-frame detections. A person standing on a boundary generates one event, not forty — which is the difference between an alerting system an operator trusts and one they mute.
-
-**Backend patterns reused, not reinvented.** Multi-site isolation, row-level security and provisioning follow the same model already running in production on [NUMEN AI](https://github.com/lindermannn/numen-platform). Two products, one tenancy model.
-
----
-
-## Targets
-
-These are design targets for the pilot, not yet-measured results — see [BENCHMARKS.md](./BENCHMARKS.md) for what the automated evaluation harness actually checks today and what's still pending a real 24h run.
-
-| Metric | Target |
-|---|---|
-| Glass-to-glass latency (camera → alert) | < 200 ms |
-| Throughput | 4 concurrent streams at 15+ FPS each |
-| Sustained NPU utilisation | < 80 % |
-| Uptime | 99.9 % (watchdog + auto-restart) |
-| Storage | Events in Postgres; video on demand only, 10 s pre/post event |
-
----
-
-## Status and roadmap
-
-**Validated prototype, pre-hardware-migration.** Pipeline working and validated against live RTSP streams on x86/Windows (see *Current vs. target* above). RK3576 hardware defined; NPU migration and commercial pilot in preparation.
-
-| Phase | Objective |
-|---|---|
-| M1 | Hardware and OS baseline; Go2RTC fronting four cameras |
-| M2 | YOLO → RKNN on NPU; detection and tracking above 15 FPS |
-| M3 | Event ingestion into Supabase; schema, RLS, basic alerting |
-| M4 | Multi-site and multi-tenant: sites, cameras, roles, API keys |
-| M5 | Web dashboard with live streams and camera map |
-| M6 | Commercial pilot — one real site, 2–4 weeks, measured |
-| M7 | Hardening: watchdogs, OTA updates, NPU metrics |
-| M8 | Tender documentation package |
-| M9 | Go-to-market: portable demo, pricing, partners |
-
----
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| **Hardware** | NanoPi M5, Rockchip RK3576 (NPU) |
-| **OS** | Linux ARM64 |
-| **Streaming** | Go2RTC, RTSP, ONVIF, WebRTC, HLS |
-| **Inference** | YOLO → ONNX → RKNN Toolkit v2 |
-| **Tracking** | ByteTrack / BoT-SORT |
-| **Backend** | Supabase (PostgreSQL, Realtime, Auth, RLS) |
-| **Languages** | Python (pipeline, API), C++ (RKNN runtime), SQL |
-| **Packaging** | Docker / Docker Compose, reproducible builds, OTA |
-
----
-
-## What is not here
-
-The source, the RKNN compilation pipeline, the tender documentation and the deployment configuration live in a private repository. This one exists so the architecture can be reviewed without publishing the product.
-
-Happy to walk through the implementation in a technical conversation.
-
----
-
-**Dimitry Donaire** — Applied AI Engineer
-[github.com/lindermannn](https://github.com/lindermannn) · [numen-ai.cl](https://numen-ai.cl)
+The next validation is a pilot with physical cameras, continuous recording, network interruption and long-duration operation. The source code, model build, deployment configuration and tender material remain private; the architecture and measurement boundaries are available for technical review.
